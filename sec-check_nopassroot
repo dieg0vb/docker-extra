@@ -1,0 +1,30 @@
+#!/bin/bash
+page=0
+
+# Clean Up Previous Runs
+rm containers.txt >> /dev/null
+rm nullroot.txt >> /dev/null
+
+#Pull 10 Pages Of Containers With 100 Per Page
+while [ $page -lt 15 ]
+do
+curl -s "https://store.docker.com/api/content/v1/products/search?page_size=100&page=${page}&q=%2B&source=community&type=image%2Cbundle" | jq -r '.summaries | sort_by(-.popularity) | .[].name' >> containersraw.txt
+page=$((page + 1))
+cat containersraw.txt | sort | uniq | head -1000 > containers.txt 
+done
+
+while read -r container; do
+     printf "Pulling  %s\n" "$container"
+     docker pull "$container"  >> /dev/null 2>&1
+done < containers.txt
+
+while read -r rights; do
+	printf "Checking  %s\n" "$rights"
+        output=$(timeout 30 docker run --entrypoint "head" "$rights" -n 1 /etc/shadow 2> /dev/null)
+        if [[ $output = *"root:::0:::::"* ]]
+        then
+        printf "%s - %s \n" "$rights" "$output" >> nullroot.txt
+        else
+          :
+        fi
+done < containers.txt
